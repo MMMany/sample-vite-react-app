@@ -1,0 +1,10 @@
+{
+  "Default": {
+    "PORT": 4000,
+    "DB_HOST": "localhost",
+    "DB_NAME": "db_data",
+    "SESSION_DB_NAME": "db_sessions",
+    "SESSION_SECRET": "test1234",
+    "DB_COL_USERINFO": "users"
+  }
+}
