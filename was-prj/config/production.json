@@ -1,6 +1,7 @@
 {
   "Default": {
     "PORT": 4040,
+    "PRIVATE_KEY_NAME": "sample_private.key",
     "DB_HOST": "localhost",
     "DB_NAME": "db_data",
     "SESSION_DB_NAME": "db_sessions",

@@ -40,10 +40,28 @@ const _findOne = async (collectionName, filter = {}, options = {}) => {
   }
 };
 
+const _insertOne = async (collectionName, document = {}, options = {}) => {
+  try {
+    const db = await getDbInstance();
+    const collection = db.collection(collectionName);
+    return await collection.insertOne(document, options);
+  } catch (err) {
+    logger.error(err.message);
+    return null;
+  }
+};
+
+const DB_COL_USERINFO = config.get("Default.DB_COL_USERINFO");
+
 const mongoFindOneUserInfo = async (filter = {}, options = {}) => {
-  return await _findOne(filter, options);
+  return await _findOne(DB_COL_USERINFO, filter, options);
+};
+
+const mongoInsertOneUserInfo = async (document = {}, options = {}) => {
+  return await _insertOne(DB_COL_USERINFO, document, options);
 };
 
 module.exports = {
   mongoFindOneUserInfo,
+  mongoInsertOneUserInfo,
 };

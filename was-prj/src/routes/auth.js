@@ -7,12 +7,13 @@ const { homedir } = require("os");
 const winston = require("winston");
 const crypto = require("crypto");
 const { BadRequestError, UnauthorizedError } = require("../utils/errors");
-const { mongoFindOneUserInfo } = require("../db/api");
+const { mongoFindOneUserInfo, mongoInsertOneUserInfo } = require("../db/api");
+const { sessionStore } = require("./front-middleware");
 
 const logger = winston.loggers.get("was-logger");
 const router = Router();
 
-const secretKey = fs.readFileSync(path.join(homedir(), ".ssh", config.get("Default.PRIVATE_KEY_NAME")));
+const secretKey = fs.readFileSync(config.get("Default.PRIVATE_KEY_NAME"));
 
 const generateToken = (payload, expiresIn) => {
   return jwt.sign({ ...payload }, secretKey, { expiresIn });
@@ -61,18 +62,48 @@ const verifySessionMiddleware = async (req, res, next) => {
   next();
 };
 
+router.post("/sign-up", async (req, res) => {
+  const { name, id, pass } = req.body;
+
+  if (await mongoFindOneUserInfo({ id })) {
+    logger.warn("user exist");
+    res.sendStatus(400);
+    return;
+  }
+
+  const encrypted = crypto.createHmac("sha256", secretKey).update(pass).digest("hex");
+  const result = await mongoInsertOneUserInfo({ name, id, pass: encrypted, role: "user" });
+  if (!result) {
+    logger.error(`'${name}' user sign-up failed`);
+    res.sendStatus(500);
+    return;
+  }
+
+  res.sendStatus(200);
+});
+
 router.post("/sign-in", (req, res) => {
   // TODO: Need to HTTPS for sign-in
   const { id, pass } = req.body;
+  if (!id || !pass) {
+    logger.warn("invalid arguments");
+    res.sendStatus(400);
+    return;
+  }
+  const userId = req.session["user-id"];
+  const token = req.session["xt-access-token"];
+  if (userId && token) {
+    logger.warn("already signed-in");
+    res.sendStatus(400);
+    return;
+  }
   mongoFindOneUserInfo({ id })
     .then((result) => {
       if (!result) {
         throw new BadRequestError("unknown user");
       }
-      const key = "test1234test1234";
-      const a = crypto.createHmac("sha256", key).update(result.pass).digest("hex");
-      const b = crypto.createHmac("sha256", key).update(pass).digest("hex");
-      if (a !== b) {
+      const encrypted = crypto.createHmac("sha256", secretKey).update(pass).digest("hex");
+      if (result.pass !== encrypted) {
         throw new BadRequestError("invalid user");
       }
       const now = Date.now();
@@ -80,12 +111,30 @@ router.post("/sign-in", (req, res) => {
       req.session["xt-access-token"] = generateToken(payload, "3h");
       req.session["xt-refresh-token"] = generateToken(payload, "1d");
       req.session["xt-create-time"] = now;
+      req.session["user-id"] = id;
       res.sendStatus(200);
     })
     .catch((err) => {
       logger.error(err.message);
       res.sendStatus(err.status ?? 500);
     });
+});
+
+router.post("/sign-out", (req, res) => {
+  const { id } = req.body;
+  const userId = req.session["user-id"];
+  const token = req.session["xt-access-token"];
+  if (!id || !userId || !token) {
+    logger.warn("invalid arguments");
+    res.sendStatus(400);
+    return;
+  }
+  if (id !== userId) {
+    logger.warn("invalid access");
+    res.sendStatus(400);
+  }
+  req.session = null;
+  res.sendStatus(200);
 });
 
 module.exports = { router, verifySessionMiddleware };
